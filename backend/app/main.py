@@ -1,54 +1,58 @@
-from fastapi import FastAPI
-from faker import Faker
-import random
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from services.generador import GeneradorFacturas
+from models.factura import Factura
 
-app = FastAPI(title="API de Facturas Fake", version="1.0")
+app = FastAPI(
+    title="API Generador de Facturas",
+    description="API para generar facturas sinteticas con datos en español",
+    version="1.0.0"
+)
 
-fake = Faker("es_ES")
+# Configurar CORS para permitir peticiones desde el frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://frontend:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.get("/facturas/v1/{numero_factura}")
-def get_factura(numero_factura: str):
-    # Generar datos falsos para empresa y cliente
-    empresa = {
-        "nombre": fake.company(),
-        "direccion": fake.address(),
-        "telefono": fake.phone_number(),
-        "email": fake.company_email()
+# Instancia del generador
+generador = GeneradorFacturas()
+
+
+@app.get("/")
+def read_root():
+    """Endpoint raiz con informacion de la API"""
+    return {
+        "mensaje": "API Generador de Facturas",
+        "version": "1.0.0",
+        "endpoints": {
+            "generar_factura": "/api/factura/{numero_factura}",
+            "documentacion": "/docs"
+        }
     }
 
-    cliente = {
-        "nombre": fake.company(),
-        "direccion": fake.address(),
-        "telefono": fake.phone_number()
-    }
 
-    # Generar entre 1 y 5 ítems de detalle
-    detalle = []
-    for _ in range(random.randint(1, 5)):
-        cantidad = random.randint(1, 10)
-        precio_unitario = round(random.uniform(50, 500), 2)
-        total = round(cantidad * precio_unitario, 2)
-        detalle.append({
-            "descripcion": fake.catch_phrase(),
-            "cantidad": cantidad,
-            "precio_unitario": precio_unitario,
-            "total": total
-        })
+@app.get("/api/factura/{numero_factura}", response_model=Factura)
+def generar_factura(numero_factura: str):
+    """
+    Genera una factura con datos sinteticos
+    
+    - **numero_factura**: Numero unico de la factura (ej: FAC-2025-001)
+    """
+    try:
+        factura = generador.generar_factura(numero_factura)
+        return factura
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar factura: {str(e)}")
 
-    subtotal = round(sum(item["total"] for item in detalle), 2)
-    impuesto = round(subtotal * 0.21, 2)  # IVA 21%
-    total = round(subtotal + impuesto, 2)
 
-    factura = {
-        "numero_factura": numero_factura,
-        "fecha_emision": str(fake.date_between(start_date="-1y", end_date="today")),
-        "empresa": empresa,
-        "cliente": cliente,
-        "detalle": detalle,
-        "subtotal": subtotal,
-        "impuesto": impuesto,
-        "total": total
-    }
+@app.get("/health")
+def health_check():
+    """Endpoint para verificar el estado del servicio"""
+    return {"status": "ok", "servicio": "backend-api"}
 
     return factura
 
